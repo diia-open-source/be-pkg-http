@@ -26,7 +26,7 @@ This repository contains the package with wrapper to make http requests.
 Example:
 
 ```
-git clone https://github.com/diia-open-source/pkg-http.git
+git clone https://github.com/diia-open-source/be-pkg-http.git pkg-http
 ```
 
 ---
