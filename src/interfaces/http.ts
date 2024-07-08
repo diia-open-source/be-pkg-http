@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { IncomingMessage } from 'http'
-import { RequestOptions } from 'https'
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
+import { IncomingMessage } from 'node:http'
+import { RequestOptions } from 'node:https'
 
 import { HttpStatusCode } from '@diia-inhouse/types'
 

@@ -3,7 +3,7 @@
     "compilerOptions": {
         "baseUrl": "../",
         "noEmit": true,
-        "strict": true,
+        "strict": true
     },
-    "include": ["./**/*"],
+    "include": ["./**/*"]
 }

@@ -1,5 +1,7 @@
-import { RequestOptions } from 'http'
-import { Agent } from 'https'
+/* eslint-disable n/no-unsupported-features/es-syntax */
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
+import { RequestOptions } from 'node:http'
+import { Agent } from 'node:https'
 
 import nock = require('nock')
 

@@ -1,7 +1,8 @@
-import { ClientRequest, IncomingHttpHeaders, IncomingMessage, request as httpRequest } from 'http'
-import { Agent, request as httpsRequest } from 'https'
-import { ParsedUrlQueryInput, stringify } from 'querystring'
-import * as tsl from 'tls'
+/* eslint-disable n/no-unsupported-features/node-builtins */
+import { ClientRequest, IncomingHttpHeaders, IncomingMessage, request as httpRequest } from 'node:http'
+import { Agent, request as httpsRequest } from 'node:https'
+import { ParsedUrlQueryInput, stringify } from 'node:querystring'
+import * as tsl from 'node:tls'
 
 import to from 'await-to-js'
 import { cloneDeep } from 'lodash'
@@ -9,7 +10,7 @@ import { cloneDeep } from 'lodash'
 import { RequestTimeoutError, ServiceUnavailableError } from '@diia-inhouse/errors'
 import { HttpMethod, HttpProtocol, Logger, PeerCertificateWithSHA256 } from '@diia-inhouse/types'
 
-import { ExtendedRequestOptions, HttpServiceResponse, HttpServiceResponseResult } from '../interfaces'
+import { ExtendedRequestOptions, HttpServiceResponse, HttpServiceResponseResult } from '../interfaces/http'
 
 /**
  * @deprecated use HttpClientService
@@ -133,7 +134,7 @@ export class HttpService {
 
                                 res.data = res.data || undefined
 
-                                if (!data.length) {
+                                if (data.length === 0) {
                                     this.logger.info('No data in response', { statusCode })
 
                                     if (!isSuccessStatusCode) {
