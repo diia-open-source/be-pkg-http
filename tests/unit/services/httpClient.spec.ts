@@ -1,300 +1,390 @@
-/* eslint-disable n/no-unsupported-features/es-syntax */
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-import { RequestOptions } from 'node:http'
 import { Agent } from 'node:https'
 
-import nock = require('nock')
+import nock from 'nock'
+import { assertType, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { mock } from 'vitest-mock-extended'
 
 import Logger from '@diia-inhouse/diia-logger'
-import { mockClass } from '@diia-inhouse/test'
+import { MetricsService } from '@diia-inhouse/diia-metrics'
 import { HttpMethod, HttpStatusCode } from '@diia-inhouse/types'
 
-import { HttpClientService } from '../../../src'
+import { HttpClientService, RequestOptions, checkServerIdentity } from '../../../src'
 
-const MockedLogger = mockClass(Logger)
+const MockedLogger = mock(Logger)
 
-describe(`HttpClientService service`, () => {
-    describe('protocol: HTTP', () => {
-        const loggerMock: Logger = new MockedLogger()
-        const httpClientService = new HttpClientService(loggerMock)
-        const mockResponse = { key: 'value' }
-        let options: RequestOptions
+type TestMetricLabels = 'testRequest' | 'getUser' | 'createUser' | 'deleteUser'
 
-        beforeEach(() => {
-            options = { host: 'http://example.com' }
-        })
-        describe.each([
-            [HttpMethod.GET, httpClientService.get.bind(httpClientService)],
-            [HttpMethod.POST, httpClientService.post.bind(httpClientService)],
-            [HttpMethod.PUT, httpClientService.put.bind(httpClientService)],
-            [HttpMethod.DELETE, httpClientService.delete.bind(httpClientService)],
-        ])('%s method retry logic', (httpMethod, serviceMethod) => {
-            it('should make a request without retry when maxRetries is 0', async () => {
-                let requestCounter = 0
-                const mockOptions = { host: `${options.host}`, maxRetries: 0 }
+describe('HttpClientService', () => {
+    const loggerMock = new MockedLogger()
+    const metricsMock = new MetricsService(
+        loggerMock,
+        {
+            pushGateway: {
+                isEnabled: true,
+                url: 'http://localhost:9091',
+            },
+        },
+        'service-name',
+    )
+    const baseUrl = 'http://example.com'
+    const httpClientService = new HttpClientService<TestMetricLabels>(loggerMock, metricsMock, 'service-name', undefined, baseUrl)
 
-                const mockedRequest = nock(`${mockOptions.host}`)
-                    .intercept('/', httpMethod)
-                    .reply(HttpStatusCode.OK, mockResponse)
-                    .on('request', () => {
-                        requestCounter++
-                    })
+    beforeEach(() => {
+        nock.cleanAll()
+    })
 
-                const [err, response] = await serviceMethod(mockOptions)
+    describe.each<[HttpMethod, keyof HttpClientService<TestMetricLabels>]>([
+        [HttpMethod.GET, 'get'],
+        [HttpMethod.POST, 'post'],
+        [HttpMethod.PUT, 'put'],
+        [HttpMethod.DELETE, 'delete'],
+        [HttpMethod.PATCH, 'patch'],
+    ])('%s method', (method, methodName) => {
+        it(`should successfully make a ${method} request`, async () => {
+            const path = '/test'
+            const mockResponse = { data: 'test-response' }
 
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    data: mockResponse,
-                    statusCode: HttpStatusCode.OK,
-                })
-                expect(requestCounter).toBe(1)
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-        })
+            const mockedRequest = nock(baseUrl).intercept(path, method).reply(200, mockResponse, { 'content-type': 'application/json' })
 
-        describe('method: `GET`', () => {
-            test('should throw an error when an invalid host is provided', async () => {
-                await expect(httpClientService.get({ host: 'invalid-host' })).rejects.toThrow('Host "invalid-host" must include protocol')
-            })
+            const response = await httpClientService[methodName](path, { metricLabel: 'testRequest' })
 
-            test('should throw an error when an unknown protocol is provided', async () => {
-                const invalidOptions = { host: 'httpz://example.com' }
-
-                await expect(async () => await httpClientService.get(invalidOptions)).rejects.toThrow('Unknown protocol, httpz')
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                headers: { 'content-type': 'application/json' },
+                body: mockResponse,
             })
 
-            it('should successfully return the response with string data', async () => {
-                const mockedText = 'mockedText'
-
-                const mockedRequest = nock(`${options.host}`).get('/').reply(HttpStatusCode.OK, mockedText)
-
-                const [err, response] = await httpClientService.get(options)
-
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    data: mockedText,
-                    statusCode: HttpStatusCode.OK,
-                })
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should successfully return the response with converted json data', async () => {
-                const mockedObject = { property: 'test' }
-
-                const mockedRequest = nock(`${options.host}`)
-                    .get('/')
-                    .reply(HttpStatusCode.OK, mockedObject, { 'Content-Type': 'application/json' })
-
-                const [err, response] = await httpClientService.get(options)
-
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    data: mockedObject,
-                    statusCode: HttpStatusCode.OK,
-                })
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should return binary data', async () => {
-                const binaryData = Buffer.alloc(10, 1)
-
-                const mockedRequest = nock(`${options.host}`)
-                    .get('/')
-                    .reply(HttpStatusCode.OK, binaryData, { 'Content-Type': 'application/pdf' })
-
-                const [err, response] = await httpClientService.get(options)
-
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    data: binaryData,
-                    statusCode: HttpStatusCode.OK,
-                })
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should throw an exception for broken JSON Data', async () => {
-                const brokenData = JSON.stringify({ property: 'test' }).split('').splice(-3, 3).join('')
-
-                const mockedRequest = nock(`${options.host}`)
-                    .get('/')
-                    .reply(HttpStatusCode.OK, brokenData, { 'Content-Type': 'application/json' })
-
-                const [err] = await httpClientService.get(options)
-
-                expect(err).toBeInstanceOf(Error)
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should return successful result for empty content-type', async () => {
-                const responseData = ['t', 'e', 's', 't']
-
-                const mockedRequest = nock(`${options.host}`).get('/').reply(HttpStatusCode.OK, responseData)
-
-                const [err, response] = await httpClientService.get(options)
-
-                expect(err).toBeNull()
-                expect(response?.statusCode).toEqual(HttpStatusCode.OK)
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should return error with unsuccessful status code', async () => {
-                const mockedRequest = nock(`${options.host}`)
-                    .get('/')
-                    .reply(HttpStatusCode.BAD_REQUEST, ['end'], { 'Content-Type': 'text/plain' })
-
-                const [err] = await httpClientService.get(options)
-
-                expect(err?.statusCode).toEqual(HttpStatusCode.BAD_REQUEST)
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should successfully return data of text/plain content-type', async () => {
-                const mockedRequest = nock(`${options.host}`).get('/').reply(HttpStatusCode.OK, 'http', { 'Content-Type': 'text/plain' })
-
-                const [err, response] = await httpClientService.get(options)
-
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    data: 'http',
-                    statusCode: HttpStatusCode.OK,
-                })
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should return successful status code and empty data', async () => {
-                const mockedRequest = nock(`${options.host}`).get('/').reply(HttpStatusCode.OK, '', { 'Content-Type': 'text/plain' })
-
-                const [err, response] = await httpClientService.get(options)
-
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    data: undefined,
-                    statusCode: HttpStatusCode.OK,
-                })
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should throw an exception for a timeout', async () => {
-                const localOptions = { ...options, timeout: 3 }
-                const mockedRequest = nock(`${options.host}`)
-                    .get('/')
-                    .delay(5)
-                    .reply(HttpStatusCode.BAD_REQUEST, ['end'], { 'Content-Type': 'text/plain' })
-
-                const [err] = await httpClientService.get(localOptions)
-
-                expect(err).toEqual(new Error('Failed due timeout reason'))
-                expect(mockedRequest.isDone()).toBe(true)
-            })
-
-            it('should throw an exception for a abort', async () => {
-                const localOptions = { ...options, timeout: 3 }
-                const mockedRequest = nock(`${options.host}`)
-                    .get('/')
-                    .reply(function () {
-                        this.req.emit('abort')
-                    })
-
-                const [err] = await httpClientService.get(localOptions)
-
-                expect(err).toEqual(new Error('Failed due abort reason'))
-                expect(mockedRequest.isDone()).toBe(true)
-            })
+            expect(mockedRequest.isDone()).toBe(true)
         })
 
-        describe('method: `POST`', () => {
-            it('should return successful status code and valid data', async () => {
-                const mockedData = { property: 'data' }
-                const mockedRequest = nock(`${options.host}`)
-                    .post('/')
-                    .reply(HttpStatusCode.OK, mockedData, { 'Content-Type': 'application/json' })
+        it(`should handle ${method} request failure`, async () => {
+            const path = '/test'
+            const errorResponse = { message: 'Bad Request' }
 
-                const [err, response] = await httpClientService.post(options, '', 'body')
+            const mockedRequest = nock(baseUrl)
+                .intercept(path, method)
+                .reply(HttpStatusCode.BAD_REQUEST, errorResponse, { 'content-type': 'application/json' })
 
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    req: expect.objectContaining({
-                        method: HttpMethod.POST,
-                    }),
-                    data: mockedData,
-                    statusCode: HttpStatusCode.OK,
-                })
+            const response = await httpClientService[methodName](path, { metricLabel: 'testRequest' })
 
-                expect(mockedRequest.isDone()).toBe(true)
+            expect(response).toMatchObject({
+                isOk: false,
+                statusCode: HttpStatusCode.BAD_REQUEST,
+                headers: { 'content-type': 'application/json' },
+                body: errorResponse,
             })
+
+            expect(mockedRequest.isDone()).toBe(true)
         })
 
-        describe('method: `DELETE`', () => {
-            it('should return successful status code and valid data', async () => {
-                const mockedData = { property: 'data' }
-                const mockedRequest = nock(`${options.host}`)
-                    .delete('/')
-                    .reply(HttpStatusCode.OK, mockedData, { 'Content-Type': 'application/json' })
+        it(`should handle ${method} request timeout`, async () => {
+            const path = '/test'
+            const timeout = 1000 // 1 second
 
-                const [err, response] = await httpClientService.delete(options)
+            const mockedRequest = nock(baseUrl)
+                .intercept(path, method)
+                .delayConnection(timeout * 2)
+                .reply(200, { data: 'should not receive this' })
 
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    req: expect.objectContaining({
-                        method: HttpMethod.DELETE,
-                    }),
-                    data: mockedData,
-                    statusCode: HttpStatusCode.OK,
-                })
+            const response = await httpClientService[methodName](path, { metricLabel: 'testRequest', timeout })
 
-                expect(mockedRequest.isDone()).toBe(true)
+            expect(response).toMatchObject({
+                isOk: false,
+                statusCode: HttpStatusCode.INTERNAL_SERVER_ERROR,
+                headers: {},
+                body: undefined,
             })
-        })
 
-        describe('method: `PUT`', () => {
-            it('should return successful status code and valid data', async () => {
-                const mockedData = { property: 'data' }
-                const mockedRequest = nock(`${options.host}`)
-                    .put('/')
-                    .reply(HttpStatusCode.OK, mockedData, { 'Content-Type': 'application/json' })
-
-                const [err, response] = await httpClientService.put(options)
-
-                expect(err).toBeNull()
-                expect(response).toMatchObject({
-                    req: expect.objectContaining({
-                        method: HttpMethod.PUT,
-                    }),
-                    data: mockedData,
-                    statusCode: HttpStatusCode.OK,
-                })
-
-                expect(mockedRequest.isDone()).toBe(true)
-            })
+            expect(mockedRequest.isDone()).toBe(true)
         })
     })
 
-    describe('protocol: HTTPS', () => {
-        const loggerMock: Logger = new MockedLogger()
-        const httpClientService = new HttpClientService(loggerMock)
-        const mockResponse = { key: 'value' }
-        const host = 'security-example.com'
-        const options: RequestOptions = {
-            host: `https://${host}}`,
-        }
-        const certFingerprint = 'fingerprint'
+    describe('get method with query parameters', () => {
+        it('should properly stringify query parameters', async () => {
+            const path = '/test'
+            const queryParams = {
+                param1: 'value1',
+                param2: 123,
+                param3: true,
+            }
+            const mockResponse = { data: 'test-response' }
 
-        it('should initiate options by agent', async () => {
-            const nockMock = nock(`${options.host}`).intercept('/', 'get').reply(HttpStatusCode.OK, mockResponse)
+            const mockedRequest = nock(baseUrl).get(path).query(queryParams).reply(200, mockResponse)
 
-            await httpClientService.get(options, certFingerprint)
+            const response = await httpClientService.get(path, { metricLabel: 'testRequest', query: queryParams })
 
-            expect(nockMock.isDone()).toBeTruthy()
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
 
-            expect(options.agent).toBeInstanceOf(Agent)
+            expect(mockedRequest.isDone()).toBe(true)
+        })
+    })
+
+    describe('patch method with body', () => {
+        it('should properly send patch request with body', async () => {
+            const path = '/test'
+            const requestBody = {
+                field1: 'value1',
+                field2: 123,
+                field3: true,
+            }
+            const mockResponse = { data: 'test-response' }
+
+            const mockedRequest = nock(baseUrl).patch(path, requestBody).reply(200, mockResponse)
+
+            const response = await httpClientService.patch(path, { metricLabel: 'testRequest', body: requestBody })
+
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+        })
+    })
+
+    describe('retry mechanism', () => {
+        it('should retry failed requests with delay', async () => {
+            const path = '/test'
+            const mockResponse = { data: 'test-response' }
+            const retryCount = 2
+            const retryDelay = 100
+
+            const mockedRequest = nock(baseUrl)
+                .get(path)
+                .reply(HttpStatusCode.SERVICE_UNAVAILABLE)
+                .get(path)
+                .reply(HttpStatusCode.SERVICE_UNAVAILABLE)
+                .get(path)
+                .reply(HttpStatusCode.OK, mockResponse)
+
+            const startTime = Date.now()
+            const response = await httpClientService.get(path, {
+                metricLabel: 'testRequest',
+                retries: retryCount,
+                retryInterval: retryDelay,
+            })
+            const endTime = Date.now()
+
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+            expect(endTime - startTime).toBeGreaterThanOrEqual(retryDelay * retryCount)
+        })
+    })
+
+    describe('baseUrl in method params', () => {
+        it('should override default baseUrl when provided in method params', async () => {
+            const path = '/test'
+            const overrideBaseUrl = 'http://override-example.com'
+            const mockResponse = { data: 'test-response' }
+
+            const mockedRequest = nock(overrideBaseUrl).get(path).reply(HttpStatusCode.OK, mockResponse)
+
+            const response = await httpClientService.get(path, { metricLabel: 'testRequest', baseUrl: overrideBaseUrl })
+
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+        })
+    })
+
+    describe('custom https agent', () => {
+        it('should use provided https agent in request', async () => {
+            const path = '/test'
+            const mockResponse = { data: 'test-response' }
+            const customAgent = new Agent({ rejectUnauthorized: false })
+
+            const mockedRequest = nock(baseUrl).get(path).reply(HttpStatusCode.OK, mockResponse)
+
+            const response = await httpClientService.get(path, { metricLabel: 'testRequest', httpsAgent: customAgent })
+
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+        })
+
+        it('should use provided checkServerIdentity function', async () => {
+            const path = '/test'
+            const mockResponse = { data: 'test-response' }
+
+            const mockedRequest = nock(baseUrl).get(path).reply(HttpStatusCode.OK, mockResponse)
+
+            const customAgent = new Agent({ checkServerIdentity: checkServerIdentity('host-fingerprint') })
+
+            const response = await httpClientService.get(path, {
+                metricLabel: 'testRequest',
+                httpsAgent: customAgent,
+            })
+
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+        })
+    })
+
+    describe('metricLabel', () => {
+        it('should include metricLabel in metric destination', async () => {
+            const path = '/users/123'
+            const mockResponse = { id: '123', name: 'Test User' }
+
+            const observeSecondsSpy = vi.spyOn(metricsMock.totalTimerMetric, 'observeSeconds')
+
+            const mockedRequest = nock(baseUrl).get(path).reply(HttpStatusCode.OK, mockResponse)
+
+            const response = await httpClientService.get(path, { metricLabel: 'getUser' })
+
+            expect(response).toMatchObject({
+                isOk: true,
+                statusCode: HttpStatusCode.OK,
+                body: mockResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+            expect(observeSecondsSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    destination: `${baseUrl}|getUser`,
+                }),
+                expect.any(BigInt),
+            )
+
+            observeSecondsSpy.mockRestore()
+        })
+
+        it('should include metricLabel in metric destination on failed request', async () => {
+            const path = '/users/123'
+            const errorResponse = { message: 'Not Found' }
+
+            const observeSecondsSpy = vi.spyOn(metricsMock.totalTimerMetric, 'observeSeconds')
+
+            const mockedRequest = nock(baseUrl).get(path).reply(HttpStatusCode.NOT_FOUND, errorResponse)
+
+            const response = await httpClientService.get(path, { metricLabel: 'getUser' })
+
+            expect(response).toMatchObject({
+                isOk: false,
+                statusCode: HttpStatusCode.NOT_FOUND,
+                body: errorResponse,
+            })
+
+            expect(mockedRequest.isDone()).toBe(true)
+            expect(observeSecondsSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    destination: `${baseUrl}|getUser`,
+                }),
+                expect.any(BigInt),
+            )
+
+            observeSecondsSpy.mockRestore()
+        })
+    })
+
+    describe('metricLabel type safety', () => {
+        it('should accept constrained metricLabel types', async () => {
+            type UserApiLabels = 'getUser' | 'createUser' | 'deleteUser'
+            const typedHttpClient = new HttpClientService<UserApiLabels>(loggerMock, metricsMock, 'user-api', undefined, baseUrl)
+
+            const path = '/users/123'
+            const mockResponse = { id: '123' }
+
+            const mockedRequest = nock(baseUrl).get(path).reply(HttpStatusCode.OK, mockResponse)
+
+            const response = await typedHttpClient.get(path, { metricLabel: 'getUser' })
+
+            expect(response.isOk).toBe(true)
+            expect(mockedRequest.isDone()).toBe(true)
+        })
+
+        // eslint-disable-next-line vitest/expect-expect
+        it('should have correct type constraints for metricLabel', () => {
+            type UserApiLabels = 'getUser' | 'createUser' | 'deleteUser'
+
+            // Valid labels should be assignable
+            expectTypeOf<'getUser'>().toMatchTypeOf<UserApiLabels>()
+            expectTypeOf<'createUser'>().toMatchTypeOf<UserApiLabels>()
+            expectTypeOf<'deleteUser'>().toMatchTypeOf<UserApiLabels>()
+
+            // Invalid label should NOT be assignable
+            expectTypeOf<'invalidLabel'>().not.toMatchTypeOf<UserApiLabels>()
+
+            // RequestOptions with constrained label requires metricLabel
+            type ConstrainedOptions = RequestOptions<UserApiLabels>
+            assertType<ConstrainedOptions>({ metricLabel: 'getUser' })
+            assertType<ConstrainedOptions>({ metricLabel: 'createUser' })
+            assertType<ConstrainedOptions>({ metricLabel: 'deleteUser' })
+
+            // Verify metricLabel is required (not optional)
+            expectTypeOf<ConstrainedOptions['metricLabel']>().toEqualTypeOf<UserApiLabels>()
+        })
+
+        // eslint-disable-next-line vitest/expect-expect
+        it('should require generic type parameter for HttpClientService', () => {
+            // HttpClientService requires a type parameter - no default
+            type ClientWithLabels = HttpClientService<'label1' | 'label2'>
+            type ClientGetMethod = ClientWithLabels['get']
+            type ClientOptions = Parameters<ClientGetMethod>[1]
+
+            // metricLabel should be required and match the generic type
+            expectTypeOf<ClientOptions['metricLabel']>().toEqualTypeOf<'label1' | 'label2'>()
+        })
+
+        // eslint-disable-next-line vitest/expect-expect
+        it('should reject broad string type via LowCardinality (resolves to never)', () => {
+            // When using broad `string` type, metricLabel should become `never`
+            type BroadStringOptions = RequestOptions<string>
+            expectTypeOf<BroadStringOptions['metricLabel']>().toBeNever()
+
+            // This prevents assignment of any value when `string` is used as type parameter
+            // @ts-expect-error - cannot assign to never
+            assertType<BroadStringOptions>({ metricLabel: 'anyValue' })
+        })
+
+        // eslint-disable-next-line vitest/expect-expect
+        it('should accept string literal unions (not never)', () => {
+            // String literal unions should work normally
+            type ValidLabels = 'getUser' | 'createUser'
+            type ValidOptions = RequestOptions<ValidLabels>
+
+            // metricLabel should NOT be never when using proper union
+            expectTypeOf<ValidOptions['metricLabel']>().not.toBeNever()
+            expectTypeOf<ValidOptions['metricLabel']>().toEqualTypeOf<ValidLabels>()
+
+            // Assignment should work
+            assertType<ValidOptions>({ metricLabel: 'getUser' })
+            assertType<ValidOptions>({ metricLabel: 'createUser' })
+        })
+
+        // eslint-disable-next-line vitest/expect-expect
+        it('should accept single string literal (not never)', () => {
+            // Even a single literal should work
+            type SingleLabel = 'onlyLabel'
+            type SingleOptions = RequestOptions<SingleLabel>
+
+            expectTypeOf<SingleOptions['metricLabel']>().not.toBeNever()
+            expectTypeOf<SingleOptions['metricLabel']>().toEqualTypeOf<SingleLabel>()
+
+            assertType<SingleOptions>({ metricLabel: 'onlyLabel' })
         })
     })
 })

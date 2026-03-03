@@ -1,7 +1,5 @@
-import { HttpClientService, HttpService } from '../services'
+import { HttpClientService } from '../services'
 
-export type HttpDeps = {
-    httpService: HttpService
-    httpsService: HttpService
-    http?: HttpClientService
+export type HttpDeps<TMetricLabel extends string> = {
+    http?: HttpClientService<TMetricLabel>
 }

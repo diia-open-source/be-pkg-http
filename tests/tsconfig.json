@@ -1,9 +1,7 @@
 {
-    "extends": "@diia-inhouse/configs/tsconfig",
+    "extends": "../tsconfig.json",
     "compilerOptions": {
-        "baseUrl": "../",
-        "noEmit": true,
-        "strict": true
+        "noEmit": true
     },
-    "include": ["./**/*"]
+    "include": ["**/*", "../src/**/*", "../vitest.config.mts"]
 }

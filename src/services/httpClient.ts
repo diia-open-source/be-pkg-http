@@ -1,212 +1,274 @@
-/* eslint-disable n/no-unsupported-features/node-builtins */
-import { ClientRequest, IncomingHttpHeaders, IncomingMessage, request as httpRequest } from 'node:http'
-import { Agent, RequestOptions, request as httpsRequest } from 'node:https'
-import { ParsedUrlQueryInput, stringify } from 'node:querystring'
-import * as tsl from 'node:tls'
+import { Span, SpanKind, SpanStatusCode, context, trace } from '@opentelemetry/api'
+import { SEMATTRS_MESSAGING_SYSTEM, SemanticAttributes } from '@opentelemetry/semantic-conventions'
+import axios, { AxiosError } from 'axios'
 
-import to from 'await-to-js'
-import { cloneDeep } from 'lodash'
+import { MetricsService, RequestMechanism, RequestStatus, TotalRequestsLabelsMap } from '@diia-inhouse/diia-metrics'
+import { ErrorType } from '@diia-inhouse/errors'
+import { DurationMs, HttpMethod, HttpStatusCode, Logger } from '@diia-inhouse/types'
 
-import { RequestTimeoutError, ServiceUnavailableError } from '@diia-inhouse/errors'
-import { HttpMethod, Logger, PeerCertificateWithSHA256 } from '@diia-inhouse/types'
+import {
+    FullRequestOptions,
+    HttpClientResponse,
+    ObserveRequestBaseParams,
+    ObserveRequestFailedParams,
+    RequestHelperResponse,
+    RequestOptions,
+} from '../interfaces/httpClient'
+import { OperationError, RequestError } from './errors'
+import { waitAndRun } from './utils'
 
-import { HttpServiceResponse, HttpServiceResponseResult } from '../interfaces/http'
+export class HttpClientService<TMetricLabel extends string> {
+    constructor(
+        private logger: Logger,
+        private metrics: MetricsService,
 
-export class HttpClientService {
-    private readonly binaryMimeTypes: string[] = ['application/pdf', 'application/p7s']
+        private readonly systemServiceName: string,
+        private readonly timeout = DurationMs.Second * 30,
+        private readonly baseUrl = '',
+    ) {}
 
-    private readonly binaryMimeTypesPrefixes: string[] = ['image/']
-
-    constructor(private logger: Logger) {}
-
-    async get<T>(options: RequestOptions, hostFingerprint?: string): Promise<HttpServiceResponse<T>> {
-        this.setCheckServerIdentity(options, hostFingerprint)
-
-        return await to<HttpServiceResponseResult>(this.makeRequest(HttpMethod.GET, options))
+    async get<TResponse, TError>(path: string, opts: RequestOptions<TMetricLabel>): Promise<HttpClientResponse<TResponse, TError>> {
+        return await this.request<TResponse, TError>({
+            path,
+            method: HttpMethod.GET,
+            ...opts,
+        })
     }
 
-    async post<T>(options: RequestOptions, hostFingerprint?: string, body?: unknown): Promise<HttpServiceResponse<T>> {
-        this.setCheckServerIdentity(options, hostFingerprint)
-
-        return await to<HttpServiceResponseResult>(this.makeRequest(HttpMethod.POST, options, body))
+    async post<TResponse, TError>(path: string, opts: RequestOptions<TMetricLabel>): Promise<HttpClientResponse<TResponse, TError>> {
+        return await this.request<TResponse, TError>({
+            path,
+            method: HttpMethod.POST,
+            ...opts,
+        })
     }
 
-    async put<T>(options: RequestOptions, hostFingerprint?: string, body?: unknown): Promise<HttpServiceResponse<T>> {
-        this.setCheckServerIdentity(options, hostFingerprint)
-
-        return await to<HttpServiceResponseResult>(this.makeRequest(HttpMethod.PUT, options, body))
+    async put<TResponse, TError>(path: string, opts: RequestOptions<TMetricLabel>): Promise<HttpClientResponse<TResponse, TError>> {
+        return await this.request<TResponse, TError>({
+            path,
+            method: HttpMethod.PUT,
+            ...opts,
+        })
     }
 
-    async delete<T>(options: RequestOptions, hostFingerprint?: string, body?: unknown): Promise<HttpServiceResponse<T>> {
-        this.setCheckServerIdentity(options, hostFingerprint)
-
-        return await to<HttpServiceResponseResult>(this.makeRequest(HttpMethod.DELETE, options, body))
+    async delete<TResponse, TError>(path: string, opts: RequestOptions<TMetricLabel>): Promise<HttpClientResponse<TResponse, TError>> {
+        return await this.request<TResponse, TError>({
+            path,
+            method: HttpMethod.DELETE,
+            ...opts,
+        })
     }
 
-    private makeRequest(method: HttpMethod, options: RequestOptions, body?: unknown): Promise<IncomingMessage & { data?: unknown }> {
-        options.method = method
+    async patch<TResponse, TError>(path: string, opts: RequestOptions<TMetricLabel>): Promise<HttpClientResponse<TResponse, TError>> {
+        return await this.request<TResponse, TError>({
+            path,
+            method: HttpMethod.PATCH,
+            ...opts,
+        })
+    }
 
-        let parsedHost: URL
-        try {
-            parsedHost = new URL(options.host || '')
-        } catch (err) {
-            const msg = `Host "${options.host}" must include protocol`
+    private async request<TResponse, TError>(opts: FullRequestOptions<TMetricLabel>): Promise<HttpClientResponse<TResponse, TError>> {
+        const activeContext = context.active()
+        const tracer = trace.getTracer(this.systemServiceName)
 
-            this.logger.error(msg, { err })
+        const baseUrl = opts.baseUrl || this.baseUrl
 
-            throw new Error(msg)
+        if (!baseUrl) {
+            throw new Error('Base URL is not provided')
         }
 
-        options.host = parsedHost.hostname
-        options.port = parsedHost.port || options.port
-
-        let requestFn: typeof httpRequest
-        if (parsedHost.protocol === 'https:') {
-            requestFn = httpsRequest
-        } else if (parsedHost.protocol === 'http:') {
-            requestFn = httpRequest
-        } else {
-            throw new Error(`Unknown protocol, ${parsedHost.protocol}`)
-        }
-
-        return new Promise(
-            (
-                resolve: (res: IncomingMessage & { data?: unknown }) => void,
-                reject: (res: (IncomingMessage & { data?: unknown }) | Error) => void,
-            ) => {
-                try {
-                    const data: (string | Buffer)[] = []
-
-                    const request: ClientRequest = requestFn(options, (response: IncomingMessage) => {
-                        if (!this.isBinaryContentType(response.headers)) {
-                            response.setEncoding('utf8')
-                        }
-
-                        response.on('data', (chunk: string | Buffer) => {
-                            data.push(chunk)
-                        })
-
-                        response.on('end', () => {
-                            let parsedData: unknown
-                            const res: IncomingMessage & { data?: unknown } = cloneDeep(response)
-                            const { statusCode = '' } = res
-                            const isSuccessStatusCode: boolean = /2\d{2}/.test(statusCode.toString())
-
-                            res.data = res.data || undefined
-
-                            if (data.length === 0) {
-                                this.logger.info('No data in response', { statusCode })
-
-                                return isSuccessStatusCode ? resolve(res) : reject(res)
-                            }
-
-                            try {
-                                if (this.isJsonContentType(response.headers)) {
-                                    parsedData = JSON.parse(data.join(''))
-                                    res.data = parsedData
-                                } else if (this.isBinaryContentType(response.headers)) {
-                                    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-                                    res.data = Buffer.concat(data as unknown as Buffer[])
-                                } else {
-                                    res.data = data.join('')
-                                }
-                            } catch (err) {
-                                this.logger.error(`Failed to parse data: ${data}`)
-
-                                if (err instanceof Error) {
-                                    return reject(err)
-                                }
-                            }
-
-                            if (!isSuccessStatusCode) {
-                                return reject(res)
-                            }
-
-                            return resolve(res)
-                        })
-                    })
-
-                    request.on('error', (err: Error) => reject(err))
-
-                    request.on('timeout', () => {
-                        const msg = 'Failed due timeout reason'
-
-                        this.logger.error(msg)
-
-                        return reject(new RequestTimeoutError(msg))
-                    })
-
-                    request.on('abort', () => {
-                        const msg = 'Failed due abort reason'
-
-                        this.logger.error(msg)
-
-                        return reject(new ServiceUnavailableError(msg))
-                    })
-
-                    if (body) {
-                        const preparedBody: string = typeof body === 'string' ? body : stringify(<ParsedUrlQueryInput>body)
-
-                        request.write(preparedBody)
-                    }
-
-                    request.end()
-                } catch (err) {
-                    if (err instanceof Error) {
-                        return reject(err)
-                    }
-                }
+        const span = tracer.startSpan(
+            opts.method,
+            {
+                kind: SpanKind.CLIENT,
+                attributes: {
+                    [SEMATTRS_MESSAGING_SYSTEM]: RequestMechanism.Http,
+                    [SemanticAttributes.HTTP_METHOD]: opts.method,
+                    [SemanticAttributes.HTTP_URL]: `${baseUrl}${opts.path}`,
+                    [SemanticAttributes.HTTP_TARGET]: opts.path,
+                    'messaging.caller': this.systemServiceName,
+                },
             },
+            activeContext,
         )
-    }
 
-    private isJsonContentType(headers: IncomingHttpHeaders): boolean {
-        const contentTypeHeader = headers['content-type']
+        const { response, error, retryCount } = await this.requestHelper<TResponse>({ ...opts, baseUrl }, span)
 
-        if (!contentTypeHeader) {
-            return false
+        span?.setAttribute('retryCount', retryCount)
+
+        if (response) {
+            const statusCode = response.status
+
+            this.logger.info('HTTP request succeeded', {
+                statusCode,
+                path: opts.path,
+                method: opts.method,
+            })
+
+            span?.setStatus({ code: SpanStatusCode.OK })
+            span?.setAttribute(SemanticAttributes.HTTP_STATUS_CODE, statusCode)
+            span?.end()
+
+            return {
+                isOk: true,
+                statusCode,
+                headers: (response.headers as Record<string, string>) || {},
+                body: response.data,
+            }
         }
 
-        return /^application\/json/.test(contentTypeHeader)
-    }
+        if (error) {
+            const { statusCode, originalError } = error
 
-    private isBinaryContentType(headers: IncomingHttpHeaders): boolean {
-        const contentTypeHeader = headers['content-type']
+            this.logger.error('HTTP request failed', {
+                err: error,
+                method: opts.method,
+                path: opts.path,
+                statusCode,
+            })
 
-        if (!contentTypeHeader) {
-            return false
+            span?.setStatus({ code: SpanStatusCode.ERROR })
+
+            span?.recordException({
+                name: originalError.name || 'Unexpected error',
+                message: originalError.message,
+                code: statusCode,
+            })
+            span?.end()
+
+            return {
+                isOk: false,
+                statusCode,
+                body: originalError instanceof AxiosError ? originalError.response?.data : undefined,
+                headers: originalError instanceof AxiosError ? (originalError.response?.headers as Record<string, string>) || {} : {},
+            }
         }
 
-        return (
-            this.binaryMimeTypes.includes(contentTypeHeader) ||
-            this.binaryMimeTypesPrefixes.some((mimeTypePrefix) => contentTypeHeader.startsWith(mimeTypePrefix))
-        )
+        throw new Error('Unexpected error caused')
     }
 
-    private setCheckServerIdentity(options: RequestOptions, hostFingerprint?: string): void {
-        if (!hostFingerprint) {
-            return
-        }
+    private async requestHelper<TResponse>(
+        opts: FullRequestOptions<TMetricLabel>,
+        span: Span,
+        currentRequestRetries = 0,
+    ): Promise<RequestHelperResponse<TResponse>> {
+        const timeout = opts.timeout || this.timeout
 
-        const checkServerIdentity: typeof tsl.checkServerIdentity = (host: string, cert: PeerCertificateWithSHA256): Error | undefined => {
-            const certFingerprint: string = cert.fingerprint256 || cert.fingerprint
+        const {
+            method,
+            path,
+            baseUrl,
+            query = {},
+            body,
+            headers = {},
+            responseType = 'json',
+            retries = 0,
+            retryInterval = 0,
+            httpsAgent,
+            httpAgent,
+            errorType: errorTypeOps,
+            metricLabel,
+        } = opts
 
-            this.logger.info(`Checking fingerprint for host: ${host}, fingerprint is ${certFingerprint}`)
-            if (!hostFingerprint || hostFingerprint === certFingerprint) {
-                this.logger.info('Fingerprint validated successfully')
+        const startTime = process.hrtime.bigint()
 
-                return
+        span.addEvent('request', { message: `Started processing request. Retry count ${currentRequestRetries}` })
+
+        try {
+            const response = await axios.request({
+                method,
+                baseURL: baseUrl,
+                url: path,
+                params: query,
+                data: body,
+                headers,
+                responseType,
+                timeout,
+                httpsAgent,
+                httpAgent,
+            })
+
+            this.observeSuccessRequest({
+                statusCode: response.status,
+                retryCount: currentRequestRetries,
+                startTime,
+                span,
+                baseUrl: baseUrl!,
+                metricLabel,
+            })
+
+            return { response, retryCount: currentRequestRetries }
+        } catch (err) {
+            const statusCode = (err as AxiosError)?.response?.status || HttpStatusCode.INTERNAL_SERVER_ERROR
+
+            const errorType = ErrorType.External || errorTypeOps
+
+            this.observeFailedRequest({
+                statusCode,
+                retryCount: currentRequestRetries,
+                startTime,
+                span,
+                errorType,
+                baseUrl: baseUrl!,
+                metricLabel,
+            })
+
+            if (err instanceof AxiosError) {
+                if (currentRequestRetries < retries) {
+                    this.logger.info('Retrying HTTP request', {
+                        err,
+                        path,
+                        retries: currentRequestRetries + 1,
+                    })
+
+                    return await waitAndRun(() => this.requestHelper<TResponse>(opts, span, currentRequestRetries + 1), retryInterval)
+                }
+
+                const requestError = new RequestError(err.message, statusCode, err)
+
+                return { error: requestError, retryCount: currentRequestRetries }
             }
 
-            this.logger.info('Failed to validate fingerprint')
+            const operationError = new OperationError('Internal package error', err as Error)
 
-            return new Error(`Fingerprint for host ${host} does not match`)
+            return { error: operationError, retryCount: currentRequestRetries }
         }
+    }
 
-        if (options.agent instanceof Agent) {
-            ;(<Agent>options.agent).options.checkServerIdentity = checkServerIdentity
-        } else {
-            options.agent = new Agent({ checkServerIdentity })
+    private observeSuccessRequest(params: ObserveRequestBaseParams): void {
+        const { statusCode, retryCount, startTime, span, baseUrl, metricLabel } = params
+
+        const labels = this.getLabels(statusCode, RequestStatus.Successful, baseUrl, metricLabel)
+
+        span.addEvent('request', { message: `Finished processing request. Retry count ${retryCount}` })
+
+        this.metrics.totalTimerMetric.observeSeconds(labels, process.hrtime.bigint() - startTime)
+    }
+
+    private observeFailedRequest(params: ObserveRequestFailedParams): void {
+        const { statusCode, retryCount, startTime, span, errorType, baseUrl, metricLabel } = params
+
+        const labels = this.getLabels(statusCode, RequestStatus.Failed, baseUrl, metricLabel, errorType)
+
+        span.addEvent('request', { message: `Finished processing request. Retry count ${retryCount}` })
+
+        this.metrics.totalTimerMetric.observeSeconds(labels, process.hrtime.bigint() - startTime)
+    }
+
+    private getLabels(
+        statusCode: number,
+        status: RequestStatus,
+        baseUrl: string,
+        metricLabel: string,
+        errorType?: ErrorType,
+    ): TotalRequestsLabelsMap {
+        return {
+            status,
+            statusCode,
+            source: this.systemServiceName,
+            destination: `${baseUrl}|${metricLabel}`,
+            mechanism: RequestMechanism.Http,
+            ...(errorType ? { errorType } : {}),
         }
     }
 }
