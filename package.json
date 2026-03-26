@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "4.0.1",
+    "version": "4.0.2",
     "description": "Wrapper to make http requests",
     "main": "dist/index.js",
     "types": "dist/types/index.d.ts",
@@ -44,11 +44,11 @@
     "devDependencies": {
         "@commitlint/cli": "19.7.1",
         "@diia-inhouse/configs": "6.1.1",
-        "@diia-inhouse/diia-logger": "3.16.4",
-        "@diia-inhouse/diia-metrics": "6.5.1",
+        "@diia-inhouse/diia-logger": "3.16.5",
+        "@diia-inhouse/diia-metrics": "6.5.3",
         "@diia-inhouse/errors": "1.18.3",
         "@diia-inhouse/eslint-config": "8.4.0",
-        "@diia-inhouse/test": "7.3.3",
+        "@diia-inhouse/test": "7.3.4",
         "@diia-inhouse/types": "11.5.0",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/semantic-conventions": "1.40.0",
