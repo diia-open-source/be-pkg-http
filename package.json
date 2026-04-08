@@ -1,10 +1,10 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "4.0.5",
+    "version": "4.0.6",
     "description": "Wrapper to make http requests",
     "main": "dist/index.js",
     "types": "dist/types/index.d.ts",
-    "repository": "https://github.com/diia-open-source/be-pkg-http.git",
+    "repository": "https://github.com/diia-open-source/be-pkg-http",
     "author": "Diia",
     "license": "SEE LICENSE IN LICENSE.md",
     "files": [
@@ -44,11 +44,11 @@
     "devDependencies": {
         "@commitlint/cli": "19.7.1",
         "@diia-inhouse/configs": "6.1.1",
-        "@diia-inhouse/diia-logger": "3.17.2",
-        "@diia-inhouse/diia-metrics": "6.5.7",
-        "@diia-inhouse/errors": "1.18.8",
+        "@diia-inhouse/diia-logger": "3.17.3",
+        "@diia-inhouse/diia-metrics": "6.5.8",
+        "@diia-inhouse/errors": "1.18.9",
         "@diia-inhouse/eslint-config": "8.8.0",
-        "@diia-inhouse/test": "7.3.8",
+        "@diia-inhouse/test": "7.3.9",
         "@diia-inhouse/types": "11.6.0",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/semantic-conventions": "1.40.0",
