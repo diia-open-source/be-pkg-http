@@ -1,6 +1,6 @@
 import { HttpStatusCode } from '@diia-inhouse/types'
 
-import { RequestError } from './requestError'
+import { RequestError } from './requestError.js'
 
 export class OperationError extends RequestError {
     constructor(message: string, originalError: Error) {

@@ -13,9 +13,9 @@ import {
     ObserveRequestFailedParams,
     RequestHelperResponse,
     RequestOptions,
-} from '../interfaces/httpClient'
-import { OperationError, RequestError } from './errors'
-import { waitAndRun } from './utils'
+} from '../interfaces/httpClient.js'
+import { OperationError, RequestError } from './errors/index.js'
+import { waitAndRun } from './utils.js'
 
 export class HttpClientService<TMetricLabel extends string> {
     constructor(
@@ -23,7 +23,7 @@ export class HttpClientService<TMetricLabel extends string> {
         private metrics: MetricsService,
 
         private readonly systemServiceName: string,
-        private readonly timeout = DurationMs.Second * 30,
+        private readonly timeout: number = DurationMs.Second * 30,
         private readonly baseUrl = '',
     ) {}
 

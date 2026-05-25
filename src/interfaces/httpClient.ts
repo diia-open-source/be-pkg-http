@@ -7,7 +7,7 @@ import { AxiosResponse, ResponseType } from 'axios'
 import { ErrorType } from '@diia-inhouse/errors'
 import { HttpMethod, HttpStatusCode } from '@diia-inhouse/types'
 
-import { OperationError, RequestError } from '../services/errors'
+import { OperationError, RequestError } from '../services/errors/index.js'
 
 export type ReadonlyQuery = Readonly<object>
 

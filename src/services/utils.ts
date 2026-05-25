@@ -1,8 +1,10 @@
+import { setTimeout as setTimeoutPromise } from 'node:timers/promises'
+
 import { PeerCertificateWithSHA256 } from '@diia-inhouse/types'
 
-export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+export const sleep = (ms: number): Promise<void> => setTimeoutPromise(ms)
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 export const waitAndRun = async <T extends (...params: []) => Promise<any>>(callback: T, ms: number): Promise<ReturnType<T>> => {
     await sleep(ms)
 

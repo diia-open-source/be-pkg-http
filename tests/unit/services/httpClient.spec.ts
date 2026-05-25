@@ -316,7 +316,6 @@ describe('HttpClientService', () => {
             expect(mockedRequest.isDone()).toBe(true)
         })
 
-        // eslint-disable-next-line vitest/expect-expect
         it('should have correct type constraints for metricLabel', () => {
             type UserApiLabels = 'getUser' | 'createUser' | 'deleteUser'
 
@@ -338,7 +337,6 @@ describe('HttpClientService', () => {
             expectTypeOf<ConstrainedOptions['metricLabel']>().toEqualTypeOf<UserApiLabels>()
         })
 
-        // eslint-disable-next-line vitest/expect-expect
         it('should require generic type parameter for HttpClientService', () => {
             // HttpClientService requires a type parameter - no default
             type ClientWithLabels = HttpClientService<'label1' | 'label2'>
@@ -349,7 +347,6 @@ describe('HttpClientService', () => {
             expectTypeOf<ClientOptions['metricLabel']>().toEqualTypeOf<'label1' | 'label2'>()
         })
 
-        // eslint-disable-next-line vitest/expect-expect
         it('should reject broad string type via LowCardinality (resolves to never)', () => {
             // When using broad `string` type, metricLabel should become `never`
             type BroadStringOptions = RequestOptions<string>
@@ -360,7 +357,6 @@ describe('HttpClientService', () => {
             assertType<BroadStringOptions>({ metricLabel: 'anyValue' })
         })
 
-        // eslint-disable-next-line vitest/expect-expect
         it('should accept string literal unions (not never)', () => {
             // String literal unions should work normally
             type ValidLabels = 'getUser' | 'createUser'
@@ -375,7 +371,6 @@ describe('HttpClientService', () => {
             assertType<ValidOptions>({ metricLabel: 'createUser' })
         })
 
-        // eslint-disable-next-line vitest/expect-expect
         it('should accept single string literal (not never)', () => {
             // Even a single literal should work
             type SingleLabel = 'onlyLabel'

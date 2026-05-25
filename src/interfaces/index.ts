@@ -1,3 +1,3 @@
-export * from './deps'
+export * from './deps.js'
 
-export * from './httpClient'
+export * from './httpClient.js'

@@ -1,3 +1,3 @@
-export * from './httpClient'
+export * from './httpClient.js'
 
-export { checkServerIdentity } from './utils'
+export { checkServerIdentity } from './utils.js'

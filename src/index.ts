@@ -1,3 +1,3 @@
-export * from './services'
+export * from './services/index.js'
 
-export * from './interfaces'
+export * from './interfaces/index.js'

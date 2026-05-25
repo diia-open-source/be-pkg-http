@@ -1,3 +1,3 @@
-export { OperationError } from './operationError'
+export { OperationError } from './operationError.js'
 
-export { RequestError } from './requestError'
+export { RequestError } from './requestError.js'

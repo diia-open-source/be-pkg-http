@@ -1,7 +1,11 @@
 {
     "extends": "../tsconfig.json",
     "compilerOptions": {
-        "noEmit": true
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "isolatedDeclarations": false,
+        "noEmit": true,
+        "rootDir": "../"
     },
     "include": ["**/*", "../src/**/*", "../vitest.config.mts"]
 }
