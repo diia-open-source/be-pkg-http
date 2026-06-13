@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "5.1.10",
+    "version": "5.1.11",
     "type": "module",
     "description": "Wrapper to make http requests",
     "main": "dist/index.js",
@@ -55,7 +55,7 @@
         "@diia-inhouse/diia-metrics": "7.1.23",
         "@diia-inhouse/errors": "2.1.10",
         "@diia-inhouse/oxc-config": "1.10.2",
-        "@diia-inhouse/test": "8.2.8",
+        "@diia-inhouse/test": "8.2.9",
         "@diia-inhouse/types": "13.2.2",
         "@opentelemetry/api": "1.9.1",
         "@opentelemetry/semantic-conventions": "1.40.0",
