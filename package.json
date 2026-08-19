@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "5.1.42",
+    "version": "5.1.43",
     "type": "module",
     "description": "Wrapper to make http requests",
     "main": "dist/index.js",
@@ -50,7 +50,7 @@
     },
     "devDependencies": {
         "@commitlint/cli": "19.7.1",
-        "@diia-inhouse/configs": "7.0.1",
+        "@diia-inhouse/configs": "7.1.0",
         "@diia-inhouse/diia-logger": "4.4.41",
         "@diia-inhouse/diia-metrics": "7.1.77",
         "@diia-inhouse/errors": "2.2.16",
