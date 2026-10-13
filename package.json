@@ -1,8 +1,14 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "5.1.87",
-    "type": "module",
+    "version": "5.1.88",
     "description": "Wrapper to make http requests",
+    "license": "SEE LICENSE IN LICENSE.md",
+    "author": "diia-team",
+    "repository": "https://github.com/diia-open-source/be-pkg-http",
+    "files": [
+        "dist"
+    ],
+    "type": "module",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
@@ -11,14 +17,6 @@
             "default": "./dist/index.js"
         },
         "./package.json": "./package.json"
-    },
-    "repository": "https://github.com/diia-open-source/be-pkg-http",
-    "author": "Diia",
-    "files": [
-        "dist"
-    ],
-    "engines": {
-        "node": ">=24"
     },
     "scripts": {
         "prebuild": "rimraf dist",
@@ -41,20 +39,13 @@
         "lodash": "4.18.1",
         "qs": "6.16.0"
     },
-    "peerDependencies": {
-        "@diia-inhouse/diia-metrics": ">=4.0.0",
-        "@diia-inhouse/errors": ">=2.0.0",
-        "@diia-inhouse/types": ">=13.1.0",
-        "@opentelemetry/api": ">=1.9.0",
-        "@opentelemetry/semantic-conventions": ">=1.28.0"
-    },
     "devDependencies": {
         "@commitlint/cli": "19.7.1",
         "@diia-inhouse/configs": "7.2.2",
         "@diia-inhouse/diia-logger": "4.7.13",
         "@diia-inhouse/diia-metrics": "7.1.139",
         "@diia-inhouse/errors": "2.3.21",
-        "@diia-inhouse/oxc-config": "3.2.0",
+        "@diia-inhouse/oxc-config": "4.0.3",
         "@diia-inhouse/test": "8.3.38",
         "@diia-inhouse/types": "14.5.4",
         "@opentelemetry/api": "1.9.1",
@@ -66,9 +57,9 @@
         "lockfile-lint": "5.0.0",
         "madge": "8.0.0",
         "nock": "14.0.15",
-        "oxfmt": "0.48.0",
-        "oxlint": "1.63.0",
-        "oxlint-tsgolint": "0.22.1",
+        "oxfmt": "0.72.0",
+        "oxlint": "1.87.0",
+        "oxlint-tsgolint": "7.0.2003",
         "rimraf": "6.1.3",
         "semantic-release": "25.0.3",
         "tsdown": "0.22.0",
@@ -76,8 +67,18 @@
         "vitest": "4.1.5",
         "vitest-mock-extended": "4.0.0"
     },
+    "peerDependencies": {
+        "@diia-inhouse/diia-metrics": ">=4.0.0",
+        "@diia-inhouse/errors": ">=2.0.0",
+        "@diia-inhouse/types": ">=13.1.0",
+        "@opentelemetry/api": ">=1.9.0",
+        "@opentelemetry/semantic-conventions": ">=1.28.0"
+    },
     "overrides": {
         "form-data": "^4.0.4"
+    },
+    "commitlint": {
+        "extends": "@diia-inhouse/configs/dist/commitlint"
     },
     "release": {
         "extends": "@diia-inhouse/configs/dist/semantic-release/package",
@@ -85,11 +86,10 @@
             "main"
         ]
     },
-    "commitlint": {
-        "extends": "@diia-inhouse/configs/dist/commitlint"
+    "engines": {
+        "node": ">=24"
     },
     "madge": {
         "tsConfig": "./tsconfig.json"
-    },
-    "license": "SEE LICENSE IN LICENSE.md"
+    }
 }
