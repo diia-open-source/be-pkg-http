@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "5.1.113",
+    "version": "5.1.114",
     "description": "Wrapper to make http requests",
     "license": "SEE LICENSE IN LICENSE.md",
     "author": "diia-team",
@@ -46,7 +46,7 @@
         "@diia-inhouse/diia-metrics": "7.1.177",
         "@diia-inhouse/errors": "2.3.42",
         "@diia-inhouse/oxc-config": "5.0.2",
-        "@diia-inhouse/test": "8.4.8",
+        "@diia-inhouse/test": "8.4.9",
         "@diia-inhouse/types": "14.12.3",
         "@opentelemetry/api": "1.9.1",
         "@opentelemetry/semantic-conventions": "1.43.0",
@@ -81,10 +81,7 @@
         "extends": "@diia-inhouse/configs/dist/commitlint"
     },
     "release": {
-        "extends": "@diia-inhouse/configs/dist/semantic-release/package",
-        "branches": [
-            "main"
-        ]
+        "extends": "@diia-inhouse/configs/dist/semantic-release/package"
     },
     "engines": {
         "node": ">=24"
