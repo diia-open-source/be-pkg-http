@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/http",
-    "version": "5.1.122",
+    "version": "5.1.123",
     "description": "Wrapper to make http requests",
     "license": "SEE LICENSE IN LICENSE.md",
     "author": "diia-team",
@@ -42,9 +42,9 @@
     "devDependencies": {
         "@commitlint/cli": "19.8.0",
         "@diia-inhouse/configs": "7.4.0",
-        "@diia-inhouse/diia-logger": "4.7.61",
-        "@diia-inhouse/diia-metrics": "7.1.190",
-        "@diia-inhouse/errors": "2.3.48",
+        "@diia-inhouse/diia-logger": "4.7.64",
+        "@diia-inhouse/diia-metrics": "7.1.194",
+        "@diia-inhouse/errors": "2.3.49",
         "@diia-inhouse/oxc-config": "5.0.2",
         "@diia-inhouse/test": "8.4.14",
         "@diia-inhouse/types": "14.13.3",
